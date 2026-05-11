@@ -50,10 +50,14 @@ def get_block2_keyboard():
     )
 
 def get_phone_keyboard():
+    buttons = [
+        [KeyboardButton(text="Поделиться номером 📞", request_contact=True)],
+        [KeyboardButton(text="Ввести номер вручную")]
+    ]
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Поделиться номером 📞", request_contact=True)]],
+        keyboard=buttons,
         resize_keyboard=True,
-        one_time_keyboard=True,
+        one_time_keyboard=False,  # Оставляем клавиатуру, чтобы можно было повторно ввести
     )
 
 # --- Обработчики команд ---
@@ -92,17 +96,29 @@ async def process_block3(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(UserFlow.waiting_for_phone)
     await callback.answer()
 
+# --- Обработка кнопки "Ввести номер вручную" ---
+@dp.message(UserFlow.waiting_for_phone, F.text == "Ввести номер вручную")
+async def prompt_manual_input(message: Message):
+    prompt_text = (
+        "Введите ваш номер телефона в любом формате:\n"
+        "Например: +79161234567, 89161234567, 8 (916) 123-45-67"
+    )
+    await message.answer(prompt_text, reply_markup=get_phone_keyboard())
+
 # --- Обработка номера телефона ---
 @dp.message(UserFlow.waiting_for_phone, F.contact)
 async def process_contact(message: Message, state: FSMContext):
-    # Получаем номер из контакта
     phone = message.contact.phone_number
     await proceed_to_block5(message, state, phone)
 
 @dp.message(UserFlow.waiting_for_phone, F.text)
 async def process_text_phone(message: Message, state: FSMContext):
-    # Проверяем текст на корректность номера
     phone = message.text.strip()
+    
+    # Игнорируем нажатие на кнопку "Ввести номер вручную" (уже обработано выше)
+    if phone == "Ввести номер вручную":
+        return
+    
     # Простая регулярка для проверки (российские и международные форматы)
     pattern = r'^(\+?\d{1,3})?[\s\-\(\)]*?\d{3}[\s\-\(\)]*?\d{3}[\s\-\(\)]*?\d{2}[\s\-\(\)]*?\d{2}$'
     if re.match(pattern, phone):
@@ -113,7 +129,6 @@ async def process_text_phone(message: Message, state: FSMContext):
             "❌ Ошибка\n\n"
             "Нужно ввести корректный номер телефона!"
         )
-        # Показываем ошибку и оставляем клавиатуру
         await message.answer(error_text, reply_markup=get_phone_keyboard())
 
 async def proceed_to_block5(message: Message, state: FSMContext, phone: str):
@@ -148,7 +163,6 @@ async def proceed_to_block5(message: Message, state: FSMContext, phone: str):
         "Желаю вам удачи и больших успехов на вашем фриланс-пути! 🌟"
     )
     
-    # Отправляем сообщение с ссылкой на Google Drive
     await message.answer(
         f"{block6_text}\n\n"
         "https://drive.google.com/file/d/1Ig92rtNwv4tcvFRaRLwMTcGnZFpkdi0J/view"
